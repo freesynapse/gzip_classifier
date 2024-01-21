@@ -72,8 +72,7 @@ typedef struct thread_info_t
     size_t sample_offset;
     size_t chunk_size;
     sample_t *input_sample;
-    std::vector<sample_t> *samples_v_ptr;
-    // std::vector<ncd_t> *ncds_v_ptr;
+    std::vector<sample_t> *samples_v_ptr;   // read-only
     ncd_t *ncds_ptr;
 
 } thread_info_t;
@@ -95,8 +94,6 @@ size_t zip(uint8_t *_input_text, size_t len)
 {
     size_t out_size = compressBound(len);
     uint8_t dest[out_size];
-    // size_t out_size;
-    // uint8_t dest[8192];
     compress2(dest, &out_size, (uint8_t *)_input_text, len, Z_BEST_COMPRESSION);
     return out_size;
 
@@ -116,8 +113,7 @@ float ncd(sample_t *_x, sample_t *_y)
     // Cx = _x->compressed_size, Cy = _y->compressed_size
     //
 
-    // uint8_t *xy = new uint8_t[_x->len + _y->len];
-    uint8_t xy[2048];
+    uint8_t xy[4096];   // could use the results of compressBound in zip() to figure this out
     memcpy(xy, _x->clear_text, _x->len);
     memcpy(xy + _x->len, _y->clear_text, _y->len);
     size_t Cxy = zip(xy, _x->len + _y->len);
@@ -132,25 +128,16 @@ float ncd(sample_t *_x, sample_t *_y)
 }
 
 //---------------------------------------------------------------------------------------
-void *classify_sample_threaded(void *_thread_info)
+void *calc_NCD_threaded(void *_thread_info)
 {
     thread_info_t *ti = (thread_info_t*)_thread_info;
 
     size_t start = ti->sample_offset;
     size_t stop = start + ti->chunk_size;
 
-    // pid_t tid = syscall(__NR_gettid);
-    // LOG_INFO("thread %d: start = %zu, stop = %zu\n", tid, start, stop);
-
-    // 1. calculate the compression length of all training samples
-    //for (size_t i = start; i < stop; i++)
-    //    (*ti->samples_v_ptr)[i].compress();
-    
-    // 2. calculate NCD between input sample and allotted training samples
+    // Calculate NCD between input sample and allotted training samples
     for (size_t i = start, j = 0; i < stop; i++, j++)
     {
-        // (*ti->ncds_v_ptr)[i].distance = ncd(ti->input_sample, &(*ti->samples_v_ptr)[i]);
-        // (*ti->ncds_v_ptr)[i].class_ = (*ti->samples_v_ptr)[i].class_;
         ti->ncds_ptr[j].distance = ncd(ti->input_sample, &(*ti->samples_v_ptr)[i]);
         ti->ncds_ptr[j].class_ = (*ti->samples_v_ptr)[i].class_;
     }
@@ -192,7 +179,7 @@ void classify_sample(sample_t _input_sample,
         tis[i].ncds_ptr         = new ncd_t[chunk_size];    // delete[]d at pthread_join
         tis[i].input_sample     = &_input_sample;
 
-        pthread_create(&threads[i], NULL, classify_sample_threaded, &tis[i]);
+        pthread_create(&threads[i], NULL, calc_NCD_threaded, &tis[i]);
 
     }
 
@@ -206,7 +193,6 @@ void classify_sample(sample_t _input_sample,
     }
 
     // sort ndcs by shortest distance and make the knn vote
-    // std::sort(ncds.begin(), ncds.end(), cmp_ncd);
     qsort(ncds, n, sizeof(ncd_t), cmp_ncd_distance);
     int ks[CLASS_COUNT] = { 0 };
     for (size_t i = 0; i < _k; i++)
@@ -254,8 +240,8 @@ size_t line_count(const char *_filename)
     std::string line;
     std::getline(fin, line);    // skip header
     size_t i = 0;
-    while (std::getline(fin, line))
-        i++;
+    while (std::getline(fin, line)) i++;
+    
     fin.close();
 
     return i;
@@ -279,6 +265,7 @@ int main(int argc, char *argv[])
         parse_training_data(train_file, train_samples);
         LOG_INFO("Processed training data in %f ms.\n", t.getDeltaTimeMs());
     }
+    
     // Don't know why, but it's faster to parse (and compress) the training data if 
     // using .push_back and then moving the data back and resizing compared to index-
     // accessing the vector (see in parse_training_data()).
