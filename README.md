@@ -1,0 +1,1 @@
+Adapted from the paper https://arxiv.org/pdf/2212.09410.pdf. The AG news dataset is used (https://www.kaggle.com/datasets/amananandrai/ag-news-classification-dataset).
