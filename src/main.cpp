@@ -179,7 +179,7 @@ float ncd(sample_t *_x, sample_t *_y)
     // where C(x) is the compressed length of x (x|y is x and y concatenated).
     //
     
-    // samples are of type sample_t, and thus already compressed at initialization
+    // samples are of type sample_t, and thus already compressed at alloc_ptrsialization
     // Cx = _x->compressed_size, Cy = _y->compressed_size
     //
 
@@ -226,15 +226,16 @@ void classify_sample(sample_t *_input_sample,
     assert(g_ncds != NULL);
     memset(g_ncds, 0, sizeof(ncd_t) * g_sample_count);
 
-    LOG_INFO("Calulating NCDs...\n");
+    LOG_INFO("Calulating NCDs...");
     {
-        // Timer t("[INFO] threaded NCD calculation", true);
+        Timer t;
         for (int i = 0; i < ncores; i++)
             pthread_create(&threads[i], NULL, ncd_threaded, &_ti[i]);
         
         for (int i = 0; i < ncores; i++)
             pthread_join(threads[i], NULL);
-
+        
+        printf(" %.4f ms.\n", t.getDeltaTimeMs());
     }
 
     // Classify using K-nearest neighbours
@@ -274,14 +275,14 @@ void classify_sample(sample_t *_input_sample,
 }
 
 //---------------------------------------------------------------------------------------
-void init(size_t _n)
+void alloc_ptrs(size_t _n)
 {
     g_samples = (sample_t *)malloc(sizeof(sample_t) * _n);
     g_ncds = (ncd_t *)malloc(sizeof(ncd_t) * _n);
 }
 
 //---------------------------------------------------------------------------------------
-void shutdown()
+void free_ptrs()
 {
     free(g_samples);
     free(g_ncds);
@@ -296,7 +297,7 @@ int main(int argc, char *argv[])
 
     // allocate memory for samples
     g_sample_count = line_count(train_file);
-    init(g_sample_count);
+    alloc_ptrs(g_sample_count);
 
     LOG_INFO("(1) Parsing samples...\n");
     parse_training_data(train_file, g_samples);
@@ -329,16 +330,15 @@ int main(int argc, char *argv[])
     // loop
     std::string input = std::string(test_input);
     LOG_INFO("example (class 3): %s\n", input.c_str());
-    bool do_continue = true;
-    while (do_continue)
+    while (1)
     {
         if (input == "exit")
-            do_continue = false;
+            break;
         else if (input == "help")
         { 
             LOG_INFO("Please provide sample text or type 'exit'.\n");
         }
-        else
+        else if (input != "")
         {
             sample_t input_sample(input, true);
             for (int i = 0; i < ncores; i++)
@@ -355,7 +355,7 @@ int main(int argc, char *argv[])
 
 
     //
-    shutdown();
+    free_ptrs();
 
     //
     return 0;
