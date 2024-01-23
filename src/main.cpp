@@ -302,8 +302,7 @@ int main(int argc, char *argv[])
     parse_training_data(train_file, g_samples);
 
     // example input sample -- class 3
-    const char *test_input = "Oil and Economy Cloud Stocks' Outlook (Reuters),Reuters - Soaring crude prices plus worries\about the economy and the outlook for earnings are expected to\hang over the stock market next week during the depth of the\summer doldrums.";
-    sample_t input_sample_ex(test_input, true);
+    const char *test_input = "Oil and Economy Cloud Stocks' Outlook (Reuters),Reuters - Soaring crude prices plus worries about the economy and the outlook for earnings are expected to hang over the stock market next week during the depth of the summer doldrums.";
 
     // setup for threaded compression of samples
     int ncores = get_nprocs();
@@ -320,7 +319,6 @@ int main(int argc, char *argv[])
         tis[i].sample_offset    = i * chunk_size;
         tis[i].chunk_size       = chunk_size + end;
         tis[i].samples_ptr      = g_samples;
-        tis[i].input_sample_ptr = &input_sample_ex;
         tis[i].ncds_ptr         = g_ncds;
 
     }
@@ -329,12 +327,11 @@ int main(int argc, char *argv[])
     compress_samples(tis);
 
     // loop
-    std::string input;
+    std::string input = std::string(test_input);
+    LOG_INFO("example (class 3): %s\n", input.c_str());
     bool do_continue = true;
     while (do_continue)
     {
-        std::cout << "input> ";
-        std::getline(std::cin, input);
         if (input == "exit")
             do_continue = false;
         else if (input == "help")
@@ -348,8 +345,12 @@ int main(int argc, char *argv[])
                 tis[i].input_sample_ptr = &input_sample;
             //
             classify_sample(&input_sample, 500, tis);
-
         }
+
+        input = "";
+        std::cout << "input> ";
+        std::getline(std::cin, input);
+
     }
 
 
